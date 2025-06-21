@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:newsstream/utils/app_styles.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
@@ -28,29 +29,25 @@ class _MyAppState extends State<MyApp> {
   void _checkLoginStatus() async {
     final authService = AuthService();
     _isLoggedIn = await authService.isLoggedIn();
-    setState(() {
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: CircularProgressIndicator(),
-          ),
-        ),
+      return MaterialApp(
+        theme: AppStyles.themeData,
+        home: const Scaffold(body: Center(child: CircularProgressIndicator())),
       );
     }
 
     return MaterialApp(
       title: 'NewsStream App',
-      theme: ThemeData(
-        primarySwatch: Colors.blueGrey,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-      ),
+      theme: AppStyles.themeData,
       home: _isLoggedIn ? const HomeScreen() : const AuthScreen(),
       routes: {
         '/auth': (context) => const AuthScreen(),

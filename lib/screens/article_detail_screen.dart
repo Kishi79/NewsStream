@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:newsstream/utils/app_styles.dart';
 import '../models/article.dart';
 import '../services/article_service.dart';
 import 'article_form_screen.dart';
 
-// Enum untuk menandakan hasil dari layar detail
 enum DetailScreenResult { updated, deleted }
 
 class ArticleDetailScreen extends StatefulWidget {
   final Article article;
-  final bool isBookmarked; // Terima status bookmark awal
+  final bool isBookmarked;
 
   const ArticleDetailScreen({
     super.key,
@@ -34,40 +34,36 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     _isBookmarked = widget.isBookmarked;
   }
 
+  void _popWithResult(Map<String, dynamic> result) {
+    if (mounted) {
+      Navigator.of(context).pop(result);
+    }
+  }
+
   void _toggleBookmark() async {
     if (_isProcessingBookmark) return;
 
-    setState(() {
-      _isProcessingBookmark = true;
-    });
+    setState(() => _isProcessingBookmark = true);
 
     try {
       if (_isBookmarked) {
         await _articleService.removeBookmark(_currentArticle.id);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Bookmark dihapus.')));
       } else {
         await _articleService.saveBookmark(_currentArticle.id);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Artikel disimpan.')));
       }
-      setState(() {
-        _isBookmarked = !_isBookmarked;
-      });
+      setState(() => _isBookmarked = !_isBookmarked);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Gagal: ${e.toString().replaceFirst('Exception: ', '')}',
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed: ${e.toString().replaceFirst('Exception: ', '')}',
+            ),
           ),
-        ),
-      );
+        );
+      }
     } finally {
-      setState(() {
-        _isProcessingBookmark = false;
-      });
+      setState(() => _isProcessingBookmark = false);
     }
   }
 
@@ -76,46 +72,42 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
       context: context,
       builder:
           (context) => AlertDialog(
-            title: const Text('Konfirmasi Hapus'),
+            title: const Text('Confirm Deletion'),
             content: const Text(
-              'Apakah Anda yakin ingin menghapus artikel ini?',
+              'Are you sure you want to delete this article?',
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Batal'),
+                child: const Text('Cancel'),
               ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.red),
+                ),
               ),
             ],
           ),
     );
 
-    if (confirm == true) {
-      _deleteArticle();
-    }
+    if (confirm == true) _deleteArticle();
   }
 
   void _deleteArticle() async {
     try {
       await _articleService.deleteArticle(_currentArticle.id);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Artikel berhasil dihapus.')),
-        );
-        // Kembali ke Home dan beri tahu bahwa artikel ini telah dihapus
-        Navigator.of(
-          context,
-        ).pop({'result': DetailScreenResult.deleted, 'id': _currentArticle.id});
-      }
+      _popWithResult({
+        'result': DetailScreenResult.deleted,
+        'id': _currentArticle.id,
+      });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Gagal menghapus artikel: ${e.toString().replaceFirst('Exception: ', '')}',
+              'Failed to delete: ${e.toString().replaceFirst('Exception: ', '')}',
             ),
           ),
         );
@@ -131,112 +123,107 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     );
 
     if (updatedArticle != null && updatedArticle is Article) {
-      setState(() {
-        _currentArticle = updatedArticle;
-      });
-      // Tidak perlu pop dari sini, cukup update state lokal
-      // Perubahan akan dikirim saat user menekan tombol back
+      setState(() => _currentArticle = updatedArticle);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Gunakan WillPopScope untuk mengirim data kembali saat tombol back ditekan
     return WillPopScope(
       onWillPop: () async {
-        Navigator.of(context).pop({
+        _popWithResult({
           'result': DetailScreenResult.updated,
+          'id': _currentArticle.id,
           'article': _currentArticle,
           'isBookmarked': _isBookmarked,
         });
         return true;
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(_currentArticle.title),
-          actions: [
-            IconButton(
-              icon:
-                  _isProcessingBookmark
-                      ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                      : Icon(
-                        _isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+        body: CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              expandedHeight: 250.0,
+              pinned: true,
+              stretch: true,
+              flexibleSpace: FlexibleSpaceBar(
+                title: Text(
+                  _currentArticle.title,
+                  style: const TextStyle(fontSize: 16),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                background: CachedNetworkImage(
+                  imageUrl: _currentArticle.imageUrl,
+                  fit: BoxFit.cover,
+                  errorWidget:
+                      (context, url, error) =>
+                          const Icon(Icons.broken_image, color: Colors.white),
+                  placeholder: (context, url) => Container(color: Colors.grey),
+                ),
+              ),
+              actions: [
+                IconButton(
+                  icon:
+                      _isProcessingBookmark
+                          ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                          : Icon(
+                            _isBookmarked
+                                ? Icons.bookmark
+                                : Icons.bookmark_border,
+                          ),
+                  onPressed: _toggleBookmark,
+                  tooltip: 'Bookmark Article',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: _navigateToEditArticle,
+                  tooltip: 'Edit Article',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: _confirmDelete,
+                  tooltip: 'Delete Article',
+                ),
+              ],
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_currentArticle.title, style: AppStyles.h1),
+                    const SizedBox(height: 12),
+                    Text(
+                      'By: ${_currentArticle.author['name'] ?? 'Anonymous'}',
+                      style: AppStyles.metadata.copyWith(fontSize: 14),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Category: ${_currentArticle.category} | Read Time: ${_currentArticle.readTime}',
+                      style: AppStyles.metadata,
+                    ),
+                    const SizedBox(height: 4),
+                    if (_currentArticle.publishedAt.isNotEmpty)
+                      Text(
+                        'Published: ${DateTime.parse(_currentArticle.publishedAt).toLocal().toString().split(' ')[0]}',
+                        style: AppStyles.metadata,
                       ),
-              onPressed: _toggleBookmark,
-              tooltip: 'Simpan Artikel',
-            ),
-            IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: _navigateToEditArticle,
-              tooltip: 'Edit Artikel',
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete),
-              onPressed: _confirmDelete,
-              tooltip: 'Hapus Artikel',
+                    const Divider(height: 30, thickness: 1),
+                    Text(_currentArticle.content, style: AppStyles.bodyText),
+                  ],
+                ),
+              ),
             ),
           ],
-        ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_currentArticle.imageUrl.isNotEmpty)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8.0),
-                  child: CachedNetworkImage(
-                    imageUrl: _currentArticle.imageUrl,
-                    placeholder:
-                        (context, url) =>
-                            const Center(child: CircularProgressIndicator()),
-                    errorWidget:
-                        (context, url, error) => const Icon(Icons.broken_image),
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: 250,
-                  ),
-                ),
-              const SizedBox(height: 15),
-              Text(
-                _currentArticle.title,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Kategori: ${_currentArticle.category} | Durasi Baca: ${_currentArticle.readTime}',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontStyle: FontStyle.italic,
-                  color: Colors.grey[700],
-                ),
-              ),
-              if (_currentArticle.publishedAt.isNotEmpty)
-                Text(
-                  'Penulis: ${_currentArticle.author['name'] ?? 'Anonim'} | ${DateTime.parse(_currentArticle.publishedAt).toLocal().toString().split(' ')[0]}',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontStyle: FontStyle.italic,
-                    color: Colors.grey[700],
-                  ),
-                ),
-              const SizedBox(height: 15),
-              Text(
-                _currentArticle.content,
-                style: const TextStyle(fontSize: 16, height: 1.5),
-              ),
-            ],
-          ),
         ),
       ),
     );

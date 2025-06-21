@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:newsstream/utils/app_styles.dart';
 import '../models/article.dart';
 import '../services/article_service.dart';
 import '../services/auth_service.dart';
@@ -21,14 +22,14 @@ class _HomeScreenState extends State<HomeScreen>
   final ArticleService _articleService = ArticleService();
   final AuthService _authService = AuthService();
 
-  // State untuk data dan pagination
+  // State for data and pagination
   List<Article> _allArticles = [];
   List<Article> _myArticles = [];
   List<Article> _trendingArticles = [];
   List<Article> _bookmarkedArticles = [];
   Set<String> _bookmarkedArticleIds = {};
 
-  // State untuk loading dan pagination control
+  // State for loading and pagination control
   bool _isLoading = true;
   Map<int, bool> _isLoadingMore = {0: false, 1: false, 2: false};
   Map<int, bool> _hasMore = {0: true, 1: true, 2: true};
@@ -45,9 +46,22 @@ class _HomeScreenState extends State<HomeScreen>
       0: ScrollController()..addListener(() => _onScroll(0)),
       1: ScrollController()..addListener(() => _onScroll(1)),
       2: ScrollController()..addListener(() => _onScroll(2)),
-      3: ScrollController(), // Bookmark tidak pakai pagination
+      3: ScrollController(),
     };
     _loadInitialData();
+  }
+
+  Future<void> _refreshData() async {
+    // Reset state before loading
+    setState(() {
+      _allArticles.clear();
+      _myArticles.clear();
+      _trendingArticles.clear();
+      _bookmarkedArticles.clear();
+      _currentPage = {0: 1, 1: 1, 2: 1};
+      _hasMore = {0: true, 1: true, 2: true};
+    });
+    await _loadInitialData();
   }
 
   Future<void> _loadInitialData() async {
@@ -57,7 +71,6 @@ class _HomeScreenState extends State<HomeScreen>
     });
 
     try {
-      // Fetch initial data for all tabs in parallel
       await Future.wait([
         _loadArticles(0, isInitial: true),
         _loadArticles(1, isInitial: true),
@@ -65,18 +78,22 @@ class _HomeScreenState extends State<HomeScreen>
         _loadBookmarkedArticles(isInitial: true),
       ]);
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   Future<void> _loadArticles(int tabIndex, {bool isInitial = false}) async {
-    if (_isLoadingMore[tabIndex] == true) return;
+    if (_isLoadingMore[tabIndex] == true || !_hasMore[tabIndex]!) return;
 
     if (!isInitial) {
       setState(() {
@@ -106,20 +123,23 @@ class _HomeScreenState extends State<HomeScreen>
           return;
       }
 
-      setState(() {
-        List<Article> currentList = _getListForIndex(tabIndex);
-        if (isInitial) currentList.clear();
-        currentList.addAll(response.articles);
-        _hasMore[tabIndex] = response.hasMore;
-        if (response.hasMore) {
-          _currentPage[tabIndex] = _currentPage[tabIndex]! + 1;
-        }
-      });
+      if (mounted) {
+        setState(() {
+          List<Article> currentList = _getListForIndex(tabIndex);
+          if (isInitial) currentList.clear();
+          currentList.addAll(response.articles);
+          _hasMore[tabIndex] = response.hasMore;
+          if (response.hasMore) {
+            _currentPage[tabIndex] = _currentPage[tabIndex]! + 1;
+          }
+        });
+      }
     } catch (e) {
-      // Handle error per tab if needed
-      if (isInitial) rethrow;
+      if (isInitial && mounted) {
+        setState(() => _errorMessage = e.toString());
+      }
     } finally {
-      if (!isInitial) {
+      if (!isInitial && mounted) {
         setState(() {
           _isLoadingMore[tabIndex] = false;
         });
@@ -129,17 +149,20 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _loadBookmarkedArticles({bool isInitial = false}) async {
     final articles = await _articleService.fetchBookmarkedArticles();
-    setState(() {
-      _bookmarkedArticles = articles;
-      _bookmarkedArticleIds = articles.map((a) => a.id).toSet();
-    });
+    if (mounted) {
+      setState(() {
+        _bookmarkedArticles = articles;
+        _bookmarkedArticleIds = articles.map((a) => a.id).toSet();
+      });
+    }
   }
 
   void _onScroll(int tabIndex) {
     final controller = _scrollControllers[tabIndex]!;
     if (controller.position.pixels >=
-            controller.position.maxScrollExtent - 200 &&
-        _hasMore[tabIndex]!) {
+            controller.position.maxScrollExtent - 300 &&
+        _hasMore[tabIndex]! &&
+        _isLoadingMore[tabIndex] == false) {
       _loadArticles(tabIndex);
     }
   }
@@ -147,8 +170,9 @@ class _HomeScreenState extends State<HomeScreen>
   void _logout() async {
     await _authService.logout();
     if (mounted) {
-      Navigator.of(context).pushReplacement(
+      Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => const AuthScreen()),
+        (route) => false,
       );
     }
   }
@@ -158,7 +182,6 @@ class _HomeScreenState extends State<HomeScreen>
       context,
     ).push(MaterialPageRoute(builder: (context) => const ArticleFormScreen()));
     if (newArticle != null && newArticle is Article) {
-      // Optimistic UI update
       setState(() {
         _allArticles.insert(0, newArticle);
         _myArticles.insert(0, newArticle);
@@ -192,7 +215,6 @@ class _HomeScreenState extends State<HomeScreen>
 
         if (isBookmarked) {
           _bookmarkedArticleIds.add(updatedArticle.id);
-          // Jika belum ada di daftar bookmark, tambahkan
           if (!_bookmarkedArticles.any((a) => a.id == updatedArticle.id)) {
             _bookmarkedArticles.insert(0, updatedArticle);
           }
@@ -240,9 +262,9 @@ class _HomeScreenState extends State<HomeScreen>
         title: const Text('NewsStream'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add),
+            icon: const Icon(Icons.add_circle_outline),
             onPressed: _navigateToCreateArticle,
-            tooltip: 'Buat Artikel Baru',
+            tooltip: 'Create New Article',
           ),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -254,10 +276,10 @@ class _HomeScreenState extends State<HomeScreen>
           controller: _tabController,
           isScrollable: true,
           tabs: const [
-            Tab(text: 'Semua Artikel'),
-            Tab(text: 'Artikel Saya'),
+            Tab(text: 'All Articles'),
+            Tab(text: 'My Articles'),
             Tab(text: 'Trending'),
-            Tab(text: 'Bookmark'),
+            Tab(text: 'Bookmarks'),
           ],
         ),
       ),
@@ -265,14 +287,14 @@ class _HomeScreenState extends State<HomeScreen>
           _isLoading
               ? const Center(child: CircularProgressIndicator())
               : _errorMessage != null
-              ? Center(child: Text('Gagal memuat data: $_errorMessage'))
+              ? Center(child: Text('Failed to load data: $_errorMessage'))
               : TabBarView(
                 controller: _tabController,
                 children: [
-                  _buildArticleList(0), // Semua Artikel
-                  _buildArticleList(1), // Artikel Saya
-                  _buildArticleList(2), // Trending
-                  _buildArticleList(3), // Bookmark
+                  _buildArticleList(0),
+                  _buildArticleList(1),
+                  _buildArticleList(2),
+                  _buildArticleList(3),
                 ],
               ),
     );
@@ -284,13 +306,14 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (articles.isEmpty && !isLoadingMore) {
       return RefreshIndicator(
-        onRefresh: _loadInitialData,
+        onRefresh: _refreshData,
         child: Center(
           child: ListView(
-            // Wrap with ListView for RefreshIndicator
             children: [
               SizedBox(height: MediaQuery.of(context).size.height * 0.3),
-              const Text('Tidak ada artikel ditemukan.'),
+              const Center(
+                child: Text('No articles found.', style: AppStyles.bodyText),
+              ),
             ],
           ),
         ),
@@ -298,15 +321,16 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     return RefreshIndicator(
-      onRefresh: _loadInitialData,
+      onRefresh: _refreshData,
       child: ListView.builder(
         controller: _scrollControllers[tabIndex],
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
         itemCount: articles.length + (isLoadingMore ? 1 : 0),
         itemBuilder: (context, index) {
           if (index == articles.length) {
             return const Center(
               child: Padding(
-                padding: EdgeInsets.all(8.0),
+                padding: EdgeInsets.all(16.0),
                 child: CircularProgressIndicator(),
               ),
             );
@@ -315,138 +339,162 @@ class _HomeScreenState extends State<HomeScreen>
           final article = articles[index];
           final isBookmarked = _bookmarkedArticleIds.contains(article.id);
 
-          return Card(
-            margin: const EdgeInsets.all(8.0),
-            child: InkWell(
-              onTap: () async {
-                final result = await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder:
-                        (context) => ArticleDetailScreen(
-                          article: article,
-                          isBookmarked: isBookmarked,
-                        ),
-                  ),
-                );
-                _handleDetailScreenResult(result);
-              },
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (article.imageUrl.isNotEmpty)
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8.0),
-                        child: CachedNetworkImage(
-                          imageUrl: article.imageUrl,
-                          placeholder:
-                              (context, url) => const Center(
-                                child: CircularProgressIndicator(),
-                              ),
-                          errorWidget:
-                              (context, url, error) =>
-                                  const Icon(Icons.broken_image),
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          height: 200,
-                        ),
+          return _ArticleCard(
+            article: article,
+            isBookmarked: isBookmarked,
+            onTap: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder:
+                      (context) => ArticleDetailScreen(
+                        article: article,
+                        isBookmarked: isBookmarked,
                       ),
-                    const SizedBox(height: 10),
-                    Text(
-                      article.title,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      article.content,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                    const SizedBox(height: 5),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Kategori: ${article.category} | ${article.readTime}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontStyle: FontStyle.italic,
-                                  color: Colors.grey[700],
-                                ),
-                              ),
-                              Text(
-                                'Penulis: ${article.author['name'] ?? 'Anonim'}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontStyle: FontStyle.italic,
-                                  color: Colors.grey[700],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          icon: Icon(
-                            isBookmarked
-                                ? Icons.bookmark
-                                : Icons.bookmark_border,
-                          ),
-                          onPressed: () {
-                            // Optimistic UI update before calling API
-                            setState(() {
-                              if (isBookmarked) {
-                                _bookmarkedArticleIds.remove(article.id);
-                                _bookmarkedArticles.removeWhere(
-                                  (a) => a.id == article.id,
-                                );
-                              } else {
-                                _bookmarkedArticleIds.add(article.id);
-                                _bookmarkedArticles.add(article);
-                              }
-                            });
-                            // Call API in background
-                            if (!isBookmarked) {
-                              _articleService
-                                  .saveBookmark(article.id)
-                                  .catchError((_) {
-                                    // Revert UI on error
-                                    setState(
-                                      () => _bookmarkedArticleIds.remove(
-                                        article.id,
-                                      ),
-                                    );
-                                  });
-                            } else {
-                              _articleService
-                                  .removeBookmark(article.id)
-                                  .catchError((_) {
-                                    // Revert UI on error
-                                    setState(
-                                      () =>
-                                          _bookmarkedArticleIds.add(article.id),
-                                    );
-                                  });
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                  ],
                 ),
-              ),
-            ),
+              );
+              _handleDetailScreenResult(result);
+            },
+            onBookmark: () {
+              // Optimistic UI update
+              setState(() {
+                if (isBookmarked) {
+                  _bookmarkedArticleIds.remove(article.id);
+                  _bookmarkedArticles.removeWhere((a) => a.id == article.id);
+                } else {
+                  _bookmarkedArticleIds.add(article.id);
+                  _bookmarkedArticles.add(article);
+                }
+              });
+
+              // API call
+              if (!isBookmarked) {
+                _articleService
+                    .saveBookmark(article.id)
+                    .catchError(
+                      (_) => setState(
+                        () => _bookmarkedArticleIds.remove(article.id),
+                      ),
+                    );
+              } else {
+                _articleService
+                    .removeBookmark(article.id)
+                    .catchError(
+                      (_) =>
+                          setState(() => _bookmarkedArticleIds.add(article.id)),
+                    );
+              }
+            },
           );
         },
+      ),
+    );
+  }
+}
+
+class _ArticleCard extends StatelessWidget {
+  final Article article;
+  final bool isBookmarked;
+  final VoidCallback onTap;
+  final VoidCallback onBookmark;
+
+  const _ArticleCard({
+    required this.article,
+    required this.isBookmarked,
+    required this.onTap,
+    required this.onBookmark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (article.imageUrl.isNotEmpty)
+              ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16.0),
+                  topRight: Radius.circular(16.0),
+                ),
+                child: CachedNetworkImage(
+                  imageUrl: article.imageUrl,
+                  placeholder:
+                      (context, url) => const SizedBox(
+                        height: 200,
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                  errorWidget:
+                      (context, url, error) => const SizedBox(
+                        height: 200,
+                        child: Icon(
+                          Icons.broken_image,
+                          size: 40,
+                          color: AppStyles.secondaryTextColor,
+                        ),
+                      ),
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: 200,
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    article.title,
+                    style: AppStyles.articleTitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    article.content,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppStyles.cardSnippet,
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Category: ${article.category} | ${article.readTime}',
+                              style: AppStyles.metadata,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'By: ${article.author['name'] ?? 'Anonymous'}',
+                              style: AppStyles.metadata,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      IconButton(
+                        icon: Icon(
+                          isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+                          color: AppStyles.primaryColor,
+                        ),
+                        onPressed: onBookmark,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

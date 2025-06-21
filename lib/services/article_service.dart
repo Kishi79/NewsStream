@@ -26,6 +26,29 @@ class ArticleService {
     };
   }
 
+  /// Helper internal untuk parsing data artikel yang mungkin memiliki struktur berbeda.
+  List<Article> _parseArticlesList(dynamic responseData) {
+    if (responseData == null) return [];
+
+    List<dynamic> articlesJson = [];
+
+    if (responseData is Map<String, dynamic>) {
+      // Prioritaskan 'articles', lalu 'bookmarks', karena ini adalah kunci yang paling umum.
+      if (responseData.containsKey('articles') &&
+          responseData['articles'] is List) {
+        articlesJson = responseData['articles'];
+      } else if (responseData.containsKey('bookmarks') &&
+          responseData['bookmarks'] is List) {
+        articlesJson = responseData['bookmarks'];
+      }
+    } else if (responseData is List) {
+      // Fallback jika 'data' adalah list itu sendiri.
+      articlesJson = responseData;
+    }
+
+    return articlesJson.map((json) => Article.fromJson(json)).toList();
+  }
+
   // Mengambil daftar semua artikel dengan pagination
   Future<PaginatedArticlesResponse> fetchArticles({
     int page = 1,
@@ -39,13 +62,12 @@ class ArticleService {
     final response = await http.get(Uri.parse(url));
 
     if (response.statusCode == 200) {
-      final Map<String, dynamic> data = json.decode(response.body);
-      final List<dynamic> articlesJson = data['data']['articles'];
-      final bool hasMore = data['data']['pagination']['hasMore'] ?? false;
-      return PaginatedArticlesResponse(
-        articles: articlesJson.map((json) => Article.fromJson(json)).toList(),
-        hasMore: hasMore,
-      );
+      final Map<String, dynamic> responseBody = json.decode(response.body);
+      final responseData = responseBody['data'];
+      final List<Article> articles = _parseArticlesList(responseData);
+      final bool hasMore = responseData['pagination']?['hasMore'] ?? false;
+
+      return PaginatedArticlesResponse(articles: articles, hasMore: hasMore);
     } else {
       final errorData = json.decode(response.body);
       throw Exception(errorData['message'] ?? 'Failed to load articles');
@@ -61,13 +83,12 @@ class ArticleService {
       Uri.parse('$_baseUrl/news/trending?page=$page&limit=$limit'),
     );
     if (response.statusCode == 200) {
-      final Map<String, dynamic> data = json.decode(response.body);
-      final List<dynamic> articlesJson = data['data']['articles'];
-      final bool hasMore = data['data']['pagination']['hasMore'] ?? false;
-      return PaginatedArticlesResponse(
-        articles: articlesJson.map((json) => Article.fromJson(json)).toList(),
-        hasMore: hasMore,
-      );
+      final Map<String, dynamic> responseBody = json.decode(response.body);
+      final responseData = responseBody['data'];
+      final List<Article> articles = _parseArticlesList(responseData);
+      final bool hasMore = responseData['pagination']?['hasMore'] ?? false;
+
+      return PaginatedArticlesResponse(articles: articles, hasMore: hasMore);
     } else {
       final errorData = json.decode(response.body);
       throw Exception(
@@ -88,13 +109,12 @@ class ArticleService {
     );
 
     if (response.statusCode == 200) {
-      final Map<String, dynamic> data = json.decode(response.body);
-      final List<dynamic> articlesJson = data['data']['articles'];
-      final bool hasMore = data['data']['pagination']['hasMore'] ?? false;
-      return PaginatedArticlesResponse(
-        articles: articlesJson.map((json) => Article.fromJson(json)).toList(),
-        hasMore: hasMore,
-      );
+      final Map<String, dynamic> responseBody = json.decode(response.body);
+      final responseData = responseBody['data'];
+      final List<Article> articles = _parseArticlesList(responseData);
+      final bool hasMore = responseData['pagination']?['hasMore'] ?? false;
+
+      return PaginatedArticlesResponse(articles: articles, hasMore: hasMore);
     } else {
       final errorData = json.decode(response.body);
       throw Exception(errorData['message'] ?? 'Failed to load user articles');
@@ -110,11 +130,9 @@ class ArticleService {
     );
 
     if (response.statusCode == 200) {
-      final Map<String, dynamic> data = json.decode(response.body);
-      // API untuk list bookmark mungkin tidak memiliki 'articles' key, sesuaikan jika perlu
-      final List<dynamic> articlesJson =
-          data['data']['bookmarks'] ?? data['data']['articles'] ?? [];
-      return articlesJson.map((json) => Article.fromJson(json)).toList();
+      final Map<String, dynamic> responseBody = json.decode(response.body);
+      final responseData = responseBody['data'];
+      return _parseArticlesList(responseData);
     } else {
       final errorData = json.decode(response.body);
       throw Exception(
@@ -149,7 +167,7 @@ class ArticleService {
     }
   }
 
-  // --- Metode CRUD yang sudah ada (tidak perlu diubah) ---
+  // --- Metode CRUD (Create, Read, Update, Delete) ---
 
   Future<Article> fetchArticleById(String id) async {
     final response = await http.get(Uri.parse('$_baseUrl/news/$id'));

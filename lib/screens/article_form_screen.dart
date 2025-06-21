@@ -1,10 +1,10 @@
-// lib/screens/article_form_screen.dart
 import 'package:flutter/material.dart';
+import 'package:newsstream/utils/app_styles.dart';
 import '../models/article.dart';
 import '../services/article_service.dart';
 
 class ArticleFormScreen extends StatefulWidget {
-  final Article? article; // Null jika membuat baru, ada jika mengedit
+  final Article? article;
   const ArticleFormScreen({super.key, this.article});
 
   @override
@@ -18,8 +18,7 @@ class _ArticleFormScreenState extends State<ArticleFormScreen> {
   final TextEditingController _readTimeController = TextEditingController();
   final TextEditingController _imageUrlController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
-  final TextEditingController _tagsController =
-      TextEditingController(); // Untuk tag
+  final TextEditingController _tagsController = TextEditingController();
 
   bool _isTrending = false;
   bool _isLoading = false;
@@ -35,9 +34,7 @@ class _ArticleFormScreenState extends State<ArticleFormScreen> {
       _imageUrlController.text = widget.article!.imageUrl;
       _contentController.text = widget.article!.content;
       _isTrending = widget.article!.isTrending;
-      _tagsController.text = widget.article!.tags.join(
-        ', ',
-      ); // Join tags for display
+      _tagsController.text = widget.article!.tags.join(', ');
     }
   }
 
@@ -46,9 +43,7 @@ class _ArticleFormScreenState extends State<ArticleFormScreen> {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       final List<String> tags =
@@ -60,9 +55,8 @@ class _ArticleFormScreenState extends State<ArticleFormScreen> {
 
       Article resultArticle;
       if (widget.article == null) {
-        // Logika untuk membuat artikel baru (POST)
         final newArticle = Article(
-          id: '', // ID akan diisi server
+          id: '',
           title: _titleController.text,
           category: _categoryController.text,
           readTime: _readTimeController.text,
@@ -70,18 +64,17 @@ class _ArticleFormScreenState extends State<ArticleFormScreen> {
           content: _contentController.text,
           isTrending: _isTrending,
           tags: tags,
-          publishedAt: '', // Akan diisi server
-          author: {}, // Akan diisi server
+          publishedAt: '',
+          author: {},
           createdAt: '',
           updatedAt: '',
         );
 
         resultArticle = await _articleService.createArticle(newArticle);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Artikel berhasil dibuat!')),
+          const SnackBar(content: Text('Article created successfully!')),
         );
       } else {
-        // Logika untuk memperbarui artikel (PUT)
         final Map<String, dynamic> updates = {
           'title': _titleController.text,
           'category': _categoryController.text,
@@ -96,12 +89,10 @@ class _ArticleFormScreenState extends State<ArticleFormScreen> {
           updates,
         );
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Artikel berhasil diperbarui!')),
+          const SnackBar(content: Text('Article updated successfully!')),
         );
       }
       if (mounted) {
-        // Kembali ke layar sebelumnya (biasanya HomeScreen atau ArticleDetailScreen)
-        // dengan membawa artikel yang berhasil dibuat/diperbarui
         Navigator.of(context).pop(resultArticle);
       }
     } catch (e) {
@@ -109,16 +100,14 @@ class _ArticleFormScreenState extends State<ArticleFormScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Gagal menyimpan artikel: ${e.toString().replaceFirst('Exception: ', '')}',
+              'Failed to save: ${e.toString().replaceFirst('Exception: ', '')}',
             ),
           ),
         );
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -139,113 +128,118 @@ class _ArticleFormScreenState extends State<ArticleFormScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.article == null ? 'Buat Artikel Baru' : 'Edit Artikel',
+          widget.article == null ? 'Create New Article' : 'Edit Article',
         ),
       ),
       body:
           _isLoading
               ? const Center(child: CircularProgressIndicator())
               : SingleChildScrollView(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(24.0),
                 child: Form(
                   key: _formKey,
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      TextFormField(
+                      _buildTextFormField(
                         controller: _titleController,
-                        decoration: const InputDecoration(
-                          labelText: 'Judul Artikel',
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Judul tidak boleh kosong.';
-                          }
-                          return null;
-                        },
+                        label: 'Article Title',
+                        validator: 'Title',
                       ),
-                      TextFormField(
+                      _buildTextFormField(
                         controller: _categoryController,
-                        decoration: const InputDecoration(
-                          labelText: 'Kategori',
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Kategori tidak boleh kosong.';
-                          }
-                          return null;
-                        },
+                        label: 'Category',
+                        validator: 'Category',
                       ),
-                      TextFormField(
+                      _buildTextFormField(
                         controller: _readTimeController,
-                        decoration: const InputDecoration(
-                          labelText: 'Durasi Baca (e.g., 5 menit)',
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Durasi baca tidak boleh kosong.';
-                          }
-                          return null;
-                        },
+                        label: 'Read Time (e.g., 5 mins)',
+                        validator: 'Read Time',
                       ),
-                      TextFormField(
+                      _buildTextFormField(
                         controller: _imageUrlController,
-                        decoration: const InputDecoration(
-                          labelText: 'URL Gambar',
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'URL gambar tidak boleh kosong.';
-                          }
-                          return null;
-                        },
+                        label: 'Image URL',
+                        validator: 'Image URL',
                       ),
-                      TextFormField(
+                      _buildTextFormField(
                         controller: _tagsController,
-                        decoration: const InputDecoration(
-                          labelText:
-                              'Tags (pisahkan dengan koma, misal: tech, ai)',
-                        ),
+                        label: 'Tags (comma separated)',
                       ),
-                      TextFormField(
+                      _buildTextFormField(
                         controller: _contentController,
-                        decoration: const InputDecoration(
-                          labelText: 'Konten Artikel',
-                        ),
+                        label: 'Article Content',
+                        validator: 'Content',
                         maxLines: 10,
-                        keyboardType: TextInputType.multiline,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Konten artikel tidak boleh kosong.';
-                          }
-                          return null;
-                        },
                       ),
-                      Row(
-                        children: [
-                          const Text('Trending:'),
-                          Switch(
-                            value: _isTrending,
-                            onChanged: (newValue) {
-                              setState(() {
-                                _isTrending = newValue;
-                              });
-                            },
+
+                      Card(
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 4.0,
                           ),
-                        ],
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Is Trending?',
+                                style: TextStyle(fontSize: 16),
+                              ),
+                              Switch(
+                                value: _isTrending,
+                                onChanged:
+                                    (newValue) =>
+                                        setState(() => _isTrending = newValue),
+                                activeColor: AppStyles.primaryColor,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 24),
                       ElevatedButton(
                         onPressed: _submitForm,
                         child: Text(
                           widget.article == null
-                              ? 'Buat Artikel'
-                              : 'Simpan Perubahan',
+                              ? 'Create Article'
+                              : 'Save Changes',
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
+    );
+  }
+
+  Widget _buildTextFormField({
+    required TextEditingController controller,
+    required String label,
+    String? validator,
+    int maxLines = 1,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: TextFormField(
+        controller: controller,
+        decoration: InputDecoration(
+          hintText: label,
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+        maxLines: maxLines,
+        validator: (value) {
+          if (validator != null && (value == null || value.isEmpty)) {
+            return '$validator cannot be empty.';
+          }
+          return null;
+        },
+      ),
     );
   }
 }
