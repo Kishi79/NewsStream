@@ -6,7 +6,7 @@ import '../models/article.dart';
 import '../services/article_service.dart';
 import 'article_detail_screen.dart';
 import 'article_form_screen.dart';
-import 'profile_screen.dart'; // <-- IMPORT BARU
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,19 +20,27 @@ class _HomeScreenState extends State<HomeScreen>
   late TabController _tabController;
   final ArticleService _articleService = ArticleService();
 
-  // State for data and pagination
+  // State untuk data dan pagination
   List<Article> _allArticles = [];
   List<Article> _myArticles = [];
   List<Article> _trendingArticles = [];
   List<Article> _bookmarkedArticles = [];
   Set<String> _bookmarkedArticleIds = {};
 
-  // State for loading and pagination control
+  // State untuk data yang difilter (untuk pencarian)
+  List<Article> _filteredArticles = [];
+
+  // State untuk loading dan kontrol pagination
   bool _isLoading = true;
   Map<int, bool> _isLoadingMore = {0: false, 1: false, 2: false};
   Map<int, bool> _hasMore = {0: true, 1: true, 2: true};
   Map<int, int> _currentPage = {0: 1, 1: 1, 2: 1};
   Map<int, ScrollController> _scrollControllers = {};
+
+  // State untuk pencarian
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   String? _errorMessage;
 
@@ -40,6 +48,8 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(_onTabChanged);
+    _searchController.addListener(_onSearchChanged);
     _scrollControllers = {
       0: ScrollController()..addListener(() => _onScroll(0)),
       1: ScrollController()..addListener(() => _onScroll(1)),
@@ -49,8 +59,40 @@ class _HomeScreenState extends State<HomeScreen>
     _loadInitialData();
   }
 
+  void _onTabChanged() {
+    // Setiap kali tab berubah, perbarui daftar yang difilter
+    _filterArticles();
+  }
+
+  void _onSearchChanged() {
+    setState(() {
+      _searchQuery = _searchController.text;
+      _filterArticles();
+    });
+  }
+
+  void _filterArticles() {
+    final listToFilter = _getListForIndex(_tabController.index);
+    if (_searchQuery.isEmpty) {
+      _filteredArticles = List.from(listToFilter);
+    } else {
+      _filteredArticles =
+          listToFilter
+              .where(
+                (article) =>
+                    article.title.toLowerCase().contains(
+                      _searchQuery.toLowerCase(),
+                    ) ||
+                    article.content.toLowerCase().contains(
+                      _searchQuery.toLowerCase(),
+                    ),
+              )
+              .toList();
+    }
+    setState(() {});
+  }
+
   Future<void> _refreshData() async {
-    // Reset state before loading
     setState(() {
       _allArticles.clear();
       _myArticles.clear();
@@ -85,6 +127,7 @@ class _HomeScreenState extends State<HomeScreen>
       if (mounted) {
         setState(() {
           _isLoading = false;
+          _filterArticles(); // Filter setelah data dimuat
         });
       }
     }
@@ -94,9 +137,7 @@ class _HomeScreenState extends State<HomeScreen>
     if (_isLoadingMore[tabIndex] == true || !_hasMore[tabIndex]!) return;
 
     if (!isInitial) {
-      setState(() {
-        _isLoadingMore[tabIndex] = true;
-      });
+      setState(() => _isLoadingMore[tabIndex] = true);
     }
 
     try {
@@ -130,6 +171,7 @@ class _HomeScreenState extends State<HomeScreen>
           if (response.hasMore) {
             _currentPage[tabIndex] = _currentPage[tabIndex]! + 1;
           }
+          _filterArticles(); // Perbarui filter setelah data baru ditambahkan
         });
       }
     } catch (e) {
@@ -138,9 +180,7 @@ class _HomeScreenState extends State<HomeScreen>
       }
     } finally {
       if (!isInitial && mounted) {
-        setState(() {
-          _isLoadingMore[tabIndex] = false;
-        });
+        setState(() => _isLoadingMore[tabIndex] = false);
       }
     }
   }
@@ -151,11 +191,15 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() {
         _bookmarkedArticles = articles;
         _bookmarkedArticleIds = articles.map((a) => a.id).toSet();
+        if (_tabController.index == 3) {
+          _filterArticles();
+        }
       });
     }
   }
 
   void _onScroll(int tabIndex) {
+    if (_isSearching) return; // Jangan load more saat sedang mencari
     final controller = _scrollControllers[tabIndex]!;
     if (controller.position.pixels >=
             controller.position.maxScrollExtent - 300 &&
@@ -173,6 +217,7 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() {
         _allArticles.insert(0, newArticle);
         _myArticles.insert(0, newArticle);
+        _filterArticles();
       });
     }
   }
@@ -190,6 +235,7 @@ class _HomeScreenState extends State<HomeScreen>
         _trendingArticles.removeWhere((a) => a.id == id);
         _bookmarkedArticles.removeWhere((a) => a.id == id);
         _bookmarkedArticleIds.remove(id);
+        _filterArticles();
       });
     } else if (res == DetailScreenResult.updated) {
       final Article updatedArticle = result['article'];
@@ -210,6 +256,7 @@ class _HomeScreenState extends State<HomeScreen>
           _bookmarkedArticleIds.remove(updatedArticle.id);
           _bookmarkedArticles.removeWhere((a) => a.id == updatedArticle.id);
         }
+        _filterArticles();
       });
     }
   }
@@ -238,7 +285,9 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   void dispose() {
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
+    _searchController.dispose();
     _scrollControllers.forEach((_, controller) => controller.dispose());
     super.dispose();
   }
@@ -247,9 +296,31 @@ class _HomeScreenState extends State<HomeScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('NewsStream'),
+        title:
+            _isSearching
+                ? TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'Search articles...',
+                    border: InputBorder.none,
+                    hintStyle: TextStyle(color: Colors.white70),
+                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 18),
+                )
+                : const Text('NewsStream'),
         actions: [
-          // <-- PERUBAHAN DIMULAI DI SINI
+          IconButton(
+            icon: Icon(_isSearching ? Icons.close : Icons.search),
+            onPressed: () {
+              setState(() {
+                _isSearching = !_isSearching;
+                if (!_isSearching) {
+                  _searchController.clear();
+                }
+              });
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.person_outline),
             onPressed: () {
@@ -264,8 +335,6 @@ class _HomeScreenState extends State<HomeScreen>
             onPressed: _navigateToCreateArticle,
             tooltip: 'Create New Article',
           ),
-          // Tombol logout telah dihapus dari sini
-          // <-- PERUBAHAN BERAKHIR DI SINI
         ],
         bottom: TabBar(
           controller: _tabController,
@@ -296,18 +365,24 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildArticleList(int tabIndex) {
-    final articles = _getListForIndex(tabIndex);
+    // Gunakan _filteredArticles untuk ditampilkan
+    final articles = _filteredArticles;
     final isLoadingMore = _isLoadingMore[tabIndex] ?? false;
 
-    if (articles.isEmpty && !isLoadingMore) {
+    if (articles.isEmpty && isLoadingMore) {
       return RefreshIndicator(
         onRefresh: _refreshData,
         child: Center(
           child: ListView(
             children: [
               SizedBox(height: MediaQuery.of(context).size.height * 0.3),
-              const Center(
-                child: Text('No articles found.', style: AppStyles.bodyText),
+              Center(
+                child: Text(
+                  _searchQuery.isNotEmpty
+                      ? 'No articles found for "$_searchQuery".'
+                      : 'No articles found.',
+                  style: AppStyles.bodyText,
+                ),
               ),
             ],
           ),
@@ -320,7 +395,7 @@ class _HomeScreenState extends State<HomeScreen>
       child: ListView.builder(
         controller: _scrollControllers[tabIndex],
         padding: const EdgeInsets.symmetric(vertical: 8.0),
-        itemCount: articles.length + (isLoadingMore ? 1 : 0),
+        itemCount: articles.length + (isLoadingMore && !_isSearching ? 1 : 0),
         itemBuilder: (context, index) {
           if (index == articles.length) {
             return const Center(
@@ -360,9 +435,9 @@ class _HomeScreenState extends State<HomeScreen>
                   _bookmarkedArticleIds.add(article.id);
                   _bookmarkedArticles.add(article);
                 }
+                _filterArticles();
               });
 
-              // API call
               if (!isBookmarked) {
                 _articleService
                     .saveBookmark(article.id)

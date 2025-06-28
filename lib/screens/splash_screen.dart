@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:newsstream/services/auth_service.dart';
 import 'package:newsstream/utils/app_styles.dart';
-import 'auth_screen.dart';
-import 'home_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // <-- IMPORT BARU
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -15,22 +14,32 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _checkLoginStatus();
+    _checkStatus();
   }
 
-  Future<void> _checkLoginStatus() async {
+  Future<void> _checkStatus() async {
     // Tunggu beberapa saat untuk menampilkan splash screen
     await Future.delayed(const Duration(seconds: 3));
 
     if (mounted) {
-      final authService = AuthService();
-      final bool isLoggedIn = await authService.isLoggedIn();
+      // Cek apakah intro screen sudah pernah ditampilkan
+      final prefs = await SharedPreferences.getInstance();
+      final bool introShown = prefs.getBool('intro_shown') ?? false;
 
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => isLoggedIn ? const HomeScreen() : const AuthScreen(),
-        ),
-      );
+      if (!introShown) {
+        // Tandai bahwa intro sudah ditampilkan
+        await prefs.setBool('intro_shown', true);
+        Navigator.of(context).pushReplacementNamed('/intro');
+      } else {
+        final authService = AuthService();
+        final bool isLoggedIn = await authService.isLoggedIn();
+
+        if (isLoggedIn) {
+          Navigator.of(context).pushReplacementNamed('/home');
+        } else {
+          Navigator.of(context).pushReplacementNamed('/auth');
+        }
+      }
     }
   }
 
