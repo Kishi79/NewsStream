@@ -4,10 +4,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:newsstream/utils/app_styles.dart';
 import '../models/article.dart';
 import '../services/article_service.dart';
-import '../services/auth_service.dart';
 import 'article_detail_screen.dart';
 import 'article_form_screen.dart';
-import 'auth_screen.dart';
+import 'profile_screen.dart'; // <-- IMPORT BARU
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,7 +19,6 @@ class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final ArticleService _articleService = ArticleService();
-  final AuthService _authService = AuthService();
 
   // State for data and pagination
   List<Article> _allArticles = [];
@@ -167,16 +165,6 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  void _logout() async {
-    await _authService.logout();
-    if (mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const AuthScreen()),
-        (route) => false,
-      );
-    }
-  }
-
   void _navigateToCreateArticle() async {
     final newArticle = await Navigator.of(
       context,
@@ -261,16 +249,23 @@ class _HomeScreenState extends State<HomeScreen>
       appBar: AppBar(
         title: const Text('NewsStream'),
         actions: [
+          // <-- PERUBAHAN DIMULAI DI SINI
+          IconButton(
+            icon: const Icon(Icons.person_outline),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              );
+            },
+            tooltip: 'My Profile',
+          ),
           IconButton(
             icon: const Icon(Icons.add_circle_outline),
             onPressed: _navigateToCreateArticle,
             tooltip: 'Create New Article',
           ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
-            tooltip: 'Logout',
-          ),
+          // Tombol logout telah dihapus dari sini
+          // <-- PERUBAHAN BERAKHIR DI SINI
         ],
         bottom: TabBar(
           controller: _tabController,
